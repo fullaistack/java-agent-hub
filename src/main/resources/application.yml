@@ -1,0 +1,154 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: agenthub
+  # ---------- MySQL：业务主库（租户/知识库/文档/会话/统计） ----------
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/agenthub?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:agenthub}
+    password: ${MYSQL_PASSWORD:agenthub123}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 10000
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+
+# ---------- MyBatis-Plus ----------
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+
+# ---------- 可观测性：Micrometer Tracing + OTLP 导出到 OpenTelemetry Collector ----------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+      export:
+        enabled: true
+    metrics:
+      export:
+        enabled: true
+
+# ---------- RocketMQ（spring-boot-starter 标准前缀；local 模式下不发送） ----------
+rocketmq:
+  name-server: ${ROCKETMQ_NAMESRV:localhost:9876}
+  producer:
+    group: agenthub-producer
+    send-message-timeout: 5000
+
+# ---------- 平台业务配置 ----------
+agenthub:
+  security:
+    # 是否开启租户认证（demo 时可关）
+    enabled: true
+    # 免认证路径
+    skip-paths: /actuator/**, /error, /api/v1/tenant/login
+  tenant:
+    header: X-Tenant-Id
+    api-key-header: X-Api-Key
+  # PGVector 向量库（独立于 MySQL 数据源，由 PgVectorStore 内部管理）
+  vector:
+    datasource:
+      jdbc-url: jdbc:postgresql://${PG_HOST:localhost}:${PG_PORT:5432}/${PG_DB:agenthub_vector}
+      username: ${PG_USER:agenthub}
+      password: ${PG_PASSWORD:agenthub123}
+    # 向量维度：需与 embedding 模型输出维度一致，也用于建表（mock-embed 默认 1024）
+    dimension: 1024
+    # 向量检索与关键字检索的 TopK 与 RRF 融合参数
+  rag:
+    vector-top-k: 5
+    keyword-top-k: 5
+    rrf-k: 60
+    hybrid: true
+  storage:
+    # local | minio：本地磁盘模式便于快速体验
+    type: ${STORAGE_TYPE:local}
+    local:
+      base-dir: ./data/files
+    minio:
+      endpoint: http://${MINIO_HOST:localhost}:9000
+      access-key: ${MINIO_ACCESS_KEY:minioadmin}
+      secret-key: ${MINIO_SECRET_KEY:minioadmin}
+      bucket: agenthub
+  parser:
+    # tika | mineru：MinerU 提供高精度版面解析，Tika 作为本地降级
+    provider: ${PARSER_PROVIDER:tika}
+    mineru:
+      url: http://${MINERU_HOST:localhost}:30000
+  mq:
+    # rocketmq | local：local 模式用 Spring 事件在进程内异步消费，便于无 MQ 环境跑通全链路
+    type: ${MQ_TYPE:local}
+    topics:
+      doc-parse: agenthub-doc-parse
+      chunk-embed: agenthub-chunk-embed
+  llm:
+    # 路由键：指向 providers[].models[].name
+    default-model: ${LLM_DEFAULT_MODEL:mock-chat}
+    providers:
+      # ---- OpenAI 兼容接口（vLLM / DeepSeek / OneAPI 等只需改 base-url） ----
+      - name: openai
+        type: openai
+        base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+        api-key: ${OPENAI_API_KEY:}
+        models:
+          - name: gpt-4o-mini
+            model: gpt-4o-mini
+            temperature: 0.3
+      # ---- Ollama 本地模型 ----
+      - name: ollama
+        type: ollama
+        base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+        api-key: ""
+        models:
+          - name: qwen2.5:7b
+            model: qwen2.5:7b
+            temperature: 0.3
+      # ---- Mock：无外部 LLM 时演示全链路 ----
+      - name: mock
+        type: mock
+        models:
+          - name: mock-chat
+            model: mock-chat
+  embedding:
+    default-model: ${EMBEDDING_MODEL:mock-embed}
+    providers:
+      - name: ollama-embed
+        type: ollama
+        base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+        model: bge-m3
+      - name: openai-embed
+        type: openai
+        base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+        api-key: ${OPENAI_API_KEY:}
+        model: text-embedding-3-small
+      - name: mock
+        type: mock
+        model: mock-embed
+  agent:
+    # builtin：内置 ReAct 编排引擎（零依赖可跑）；agentscope：对接 AgentScope 2.0 HarnessAgent
+    engine: ${AGENT_ENGINE:builtin}
+    max-iterations: 5
+    memory-window: 10
+    agentscope:
+      # AgentScope 模型 URI：{provider}:{model}，依赖对应 extensions-model 模块
+      default-model: "ollama:qwen2.5:7b"
+      workspace: .agentscope/workspace
+
+logging:
+  level:
+    com.agenthub: INFO
+    org.apache.rocketmq: WARN
