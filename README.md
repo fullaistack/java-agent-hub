@@ -172,15 +172,6 @@ com.agenthub
 └── task           # 异步任务：RocketMQ 生产者/消费者 + 本地事件降级
 ```
 
-## 自媒体教程链接（占位）
-
-- 教程系列一：多租户数据隔离的三种实现与 MyBatis-Plus 租户插件原理 → `https://blog.example.com/agenthub/multi-tenant`
-- 教程系列二：RAG 异步流水线：MinerU + 分块 + PGVector 实战 → `https://blog.example.com/agenthub/rag-pipeline`
-- 教程系列三：AgentScope Harness 与内置 ReAct 引擎对比 → `https://blog.example.com/agenthub/harness`
-- 教程系列四：MCP 协议与 Java SDK 2.0 实战 → `https://blog.example.com/agenthub/mcp`
-- 教程系列五：OpenTelemetry 全链路埋点落地 → `https://blog.example.com/agenthub/otel`
-- B 站 / 视频号 / 公众号：`@java-agent-hub`（占位，发布后替换）
-
 ## 默认提示词
 
 **RAG 助手**（知识库问答）：
